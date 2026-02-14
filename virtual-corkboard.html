@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Cork Board - Pin Your Memories</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            overflow: hidden;
+        }
+
+        #root {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .font-handwriting {
+            font-family: 'Comic Sans MS', 'Brush Script MT', cursive;
+        }
+
+        textarea::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        textarea::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        textarea::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.2);
+            border-radius: 3px;
+        }
+
+        .delete-btn {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            line-height: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        const VirtualCorkBoard = () => {
+            const [items, setItems] = useState([]);
+            const [selectedPin, setSelectedPin] = useState('classic');
+            const [showMenu, setShowMenu] = useState(false);
+            const [draggedItem, setDraggedItem] = useState(null);
+            const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+            const fileInputRef = useRef(null);
+
+            const pushPins = {
+                classic: { icon: '📌', color: '#e63946', name: 'Classic' },
+                flower: { icon: '🌸', color: '#ff006e', name: 'Flower' },
+                star: { icon: '⭐', color: '#ffbe0b', name: 'Star' },
+                heart: { icon: '💗', color: '#ff006e', name: 'Heart' },
+                car: { icon: '🚗', color: '#3a86ff', name: 'Car' },
+                food: { icon: '🍕', color: '#fb5607', name: 'Food' },
+                gem: { icon: '💎', color: '#8338ec', name: 'Gem' },
+                leaf: { icon: '🍃', color: '#06a77d', name: 'Leaf' }
+            };
+
+            const noteColors = [
+                '#fef3c7', '#dbeafe', '#fce7f3', '#d1fae5', '#e0e7ff', '#fed7aa'
+            ];
+
+            const addStickyNote = () => {
+                const newNote = {
+                    id: Date.now(),
+                    type: 'note',
+                    content: '',
+                    color: noteColors[Math.floor(Math.random() * noteColors.length)],
+                    x: Math.random() * 60 + 10,
+                    y: Math.random() * 60 + 10,
+                    rotation: Math.random() * 8 - 4,
+                    pin: selectedPin
+                };
+                setItems([...items, newNote]);
+            };
+
+            const addPhoto = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const newPhoto = {
+                            id: Date.now(),
+                            type: 'photo',
+                            src: event.target.result,
+                            x: Math.random() * 60 + 10,
+                            y: Math.random() * 60 + 10,
+                            rotation: Math.random() * 6 - 3,
+                            pin: selectedPin
+                        };
+                        setItems([...items, newPhoto]);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const addCharm = () => {
+                const charms = ['✨', '🎀', '🌈', '🦋', '🌙', '☀️', '🎨', '🎭', '🎪', '🎯', '🎸', '🎹', '🎺', '🎻', '🏆', '🎲', '🎰'];
+                const newCharm = {
+                    id: Date.now(),
+                    type: 'charm',
+                    icon: charms[Math.floor(Math.random() * charms.length)],
+                    x: Math.random() * 70 + 10,
+                    y: Math.random() * 70 + 10,
+                    rotation: Math.random() * 360,
+                    pin: selectedPin
+                };
+                setItems([...items, newCharm]);
+            };
+
+            const updateItemContent = (id, content) => {
+                setItems(items.map(item => 
+                    item.id === id ? { ...item, content } : item
+                ));
+            };
+
+            const deleteItem = (id) => {
+                setItems(items.filter(item => item.id !== id));
+            };
+
+            const handleMouseDown = (e, item) => {
+                if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON') return;
+                
+                const rect = e.currentTarget.getBoundingClientRect();
+                setDragOffset({
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top
+                });
+                setDraggedItem(item);
+            };
+
+            const handleTouchStart = (e, item) => {
+                if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON') return;
+                
+                const touch = e.touches[0];
+                const rect = e.currentTarget.getBoundingClientRect();
+                setDragOffset({
+                    x: touch.clientX - rect.left,
+                    y: touch.clientY - rect.top
+                });
+                setDraggedItem(item);
+            };
+
+            const handleMouseMove = (e) => {
+                if (!draggedItem) return;
+                
+                const container = document.getElementById('cork-board');
+                const rect = container.getBoundingClientRect();
+                
+                const x = ((e.clientX - rect.left - dragOffset.x) / rect.width) * 100;
+                const y = ((e.clientY - rect.top - dragOffset.y) / rect.height) * 100;
+                
+                setItems(items.map(item =>
+                    item.id === draggedItem.id
+                        ? { ...item, x: Math.max(0, Math.min(85, x)), y: Math.max(0, Math.min(85, y)) }
+                        : item
+                ));
+            };
+
+            const handleTouchMove = (e) => {
+                if (!draggedItem) return;
+                e.preventDefault();
+                
+                const touch = e.touches[0];
+                const container = document.getElementById('cork-board');
+                const rect = container.getBoundingClientRect();
+                
+                const x = ((touch.clientX - rect.left - dragOffset.x) / rect.width) * 100;
+                const y = ((touch.clientY - rect.top - dragOffset.y) / rect.height) * 100;
+                
+                setItems(items.map(item =>
+                    item.id === draggedItem.id
+                        ? { ...item, x: Math.max(0, Math.min(85, x)), y: Math.max(0, Math.min(85, y)) }
+                        : item
+                ));
+            };
+
+            const handleMouseUp = () => {
+                setDraggedItem(null);
+            };
+
+            useEffect(() => {
+                if (draggedItem) {
+                    window.addEventListener('mousemove', handleMouseMove);
+                    window.addEventListener('mouseup', handleMouseUp);
+                    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+                    window.addEventListener('touchend', handleMouseUp);
+                    return () => {
+                        window.removeEventListener('mousemove', handleMouseMove);
+                        window.removeEventListener('mouseup', handleMouseUp);
+                        window.removeEventListener('touchmove', handleTouchMove);
+                        window.removeEventListener('touchend', handleMouseUp);
+                    };
+                }
+            }, [draggedItem, dragOffset, items]);
+
+            return (
+                <div className="w-full h-screen bg-gradient-to-br from-amber-50 to-orange-50 flex flex-col">
+                    {/* Toolbar */}
+                    <div className="bg-white shadow-md p-3 md:p-4 flex items-center justify-between flex-wrap gap-2">
+                        <h1 className="text-xl md:text-2xl font-bold text-amber-900">✨ My Cork Board</h1>
+                        
+                        <div className="flex gap-2 flex-wrap">
+                            <button
+                                onClick={addStickyNote}
+                                className="flex items-center gap-1 md:gap-2 px-3 md:px-4 py-2 bg-yellow-200 hover:bg-yellow-300 rounded-lg transition-colors text-sm md:text-base font-medium"
+                            >
+                                <span className="text-lg">📝</span>
+                                <span className="hidden sm:inline">Note</span>
+                            </button>
+                            
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="flex items-center gap-1 md:gap-2 px-3 md:px-4 py-2 bg-blue-200 hover:bg-blue-300 rounded-lg transition-colors text-sm md:text-base font-medium"
+                            >
+                                <span className="text-lg">📷</span>
+                                <span className="hidden sm:inline">Photo</span>
+                            </button>
+                            
+                            <button
+                                onClick={addCharm}
+                                className="flex items-center gap-1 md:gap-2 px-3 md:px-4 py-2 bg-purple-200 hover:bg-purple-300 rounded-lg transition-colors text-sm md:text-base font-medium"
+                            >
+                                <span className="text-lg">✨</span>
+                                <span className="hidden sm:inline">Charm</span>
+                            </button>
+                            
+                            <button
+                                onClick={() => setShowMenu(!showMenu)}
+                                className="px-3 md:px-4 py-2 bg-amber-200 hover:bg-amber-300 rounded-lg transition-colors text-sm md:text-base font-medium"
+                            >
+                                📌 Pins
+                            </button>
+                        </div>
+                        
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={addPhoto}
+                            className="hidden"
+                        />
+                    </div>
+
+                    {/* Push Pin Selector */}
+                    {showMenu && (
+                        <div className="absolute top-16 md:top-20 right-4 bg-white shadow-2xl rounded-xl p-4 z-50 border-2 border-amber-200">
+                            <h3 className="font-bold mb-3 text-amber-900">Choose Pin Style</h3>
+                            <div className="grid grid-cols-4 gap-2">
+                                {Object.entries(pushPins).map(([key, { icon, name }]) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => {
+                                            setSelectedPin(key);
+                                            setShowMenu(false);
+                                        }}
+                                        className={`text-2xl md:text-3xl p-2 md:p-3 rounded-lg transition-all hover:scale-110 ${
+                                            selectedPin === key ? 'bg-amber-200 ring-2 ring-amber-500' : 'bg-gray-50 hover:bg-gray-100'
+                                        }`}
+                                        title={name}
+                                    >
+                                        {icon}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Cork Board */}
+                    <div
+                        id="cork-board"
+                        className="flex-1 relative overflow-hidden"
+                        style={{
+                            background: `
+                                radial-gradient(circle at 20% 30%, rgba(139, 92, 46, 0.03) 0%, transparent 50%),
+                                radial-gradient(circle at 80% 70%, rgba(139, 92, 46, 0.03) 0%, transparent 50%),
+                                linear-gradient(135deg, #d4a574 0%, #c99656 50%, #b88a52 100%)
+                            `,
+                            backgroundSize: '100% 100%, 100% 100%, 100% 100%',
+                            boxShadow: 'inset 0 0 100px rgba(0,0,0,0.1)'
+                        }}
+                    >
+                        {/* Cork texture overlay */}
+                        <div 
+                            className="absolute inset-0 opacity-20 pointer-events-none"
+                            style={{
+                                backgroundImage: `
+                                    repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(139, 92, 46, 0.1) 2px, rgba(139, 92, 46, 0.1) 4px),
+                                    repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 92, 46, 0.1) 2px, rgba(139, 92, 46, 0.1) 4px)
+                                `
+                            }}
+                        />
+
+                        {/* Items */}
+                        {items.map((item) => (
+                            <div
+                                key={item.id}
+                                onMouseDown={(e) => handleMouseDown(e, item)}
+                                onTouchStart={(e) => handleTouchStart(e, item)}
+                                style={{
+                                    position: 'absolute',
+                                    left: `${item.x}%`,
+                                    top: `${item.y}%`,
+                                    transform: `rotate(${item.rotation}deg)`,
+                                    cursor: draggedItem?.id === item.id ? 'grabbing' : 'grab',
+                                    touchAction: 'none',
+                                    zIndex: draggedItem?.id === item.id ? 1000 : 1
+                                }}
+                                className="transition-transform hover:scale-105"
+                            >
+                                {/* Push Pin */}
+                                <div
+                                    className="absolute -top-2 left-1/2 -translate-x-1/2 text-2xl md:text-3xl z-10 pointer-events-none"
+                                    style={{
+                                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                                        transform: 'translateX(-50%) translateY(-8px)'
+                                    }}
+                                >
+                                    {pushPins[item.pin].icon}
+                                </div>
+
+                                {/* Sticky Note */}
+                                {item.type === 'note' && (
+                                    <div
+                                        className="relative w-40 h-40 md:w-48 md:h-48 p-3 md:p-4"
+                                        style={{
+                                            backgroundColor: item.color,
+                                            boxShadow: '0 4px 12px rgba(0,0,0,0.15), inset 0 0 30px rgba(0,0,0,0.03)',
+                                            background: `
+                                                linear-gradient(135deg, ${item.color} 0%, ${item.color}dd 100%),
+                                                repeating-linear-gradient(0deg, transparent, transparent 20px, rgba(0,0,0,0.02) 20px, rgba(0,0,0,0.02) 21px)
+                                            `
+                                        }}
+                                    >
+                                        <textarea
+                                            value={item.content}
+                                            onChange={(e) => updateItemContent(item.id, e.target.content)}
+                                            placeholder="Write a note..."
+                                            className="w-full h-full bg-transparent resize-none outline-none font-handwriting text-gray-800 text-base md:text-lg"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onTouchStart={(e) => e.stopPropagation()}
+                                        />
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteItem(item.id);
+                                            }}
+                                            className="delete-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Photo */}
+                                {item.type === 'photo' && (
+                                    <div
+                                        className="relative"
+                                        style={{
+                                            boxShadow: '0 6px 20px rgba(0,0,0,0.3)'
+                                        }}
+                                    >
+                                        <div
+                                            className="bg-white p-2"
+                                            style={{
+                                                boxShadow: 'inset 0 0 20px rgba(0,0,0,0.05)'
+                                            }}
+                                        >
+                                            <img
+                                                src={item.src}
+                                                alt="Pinned"
+                                                className="w-44 h-44 md:w-56 md:h-56 object-cover pointer-events-none"
+                                                style={{
+                                                    boxShadow: 'inset 0 0 10px rgba(0,0,0,0.1)'
+                                                }}
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteItem(item.id);
+                                            }}
+                                            className="delete-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Charm */}
+                                {item.type === 'charm' && (
+                                    <div className="relative">
+                                        <div
+                                            className="text-5xl md:text-6xl pointer-events-none"
+                                            style={{
+                                                filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))'
+                                            }}
+                                        >
+                                            {item.icon}
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                deleteItem(item.id);
+                                            }}
+                                            className="delete-btn absolute -top-2 -right-2 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+
+                        {/* Instructions */}
+                        {items.length === 0 && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <div className="text-center text-amber-900 opacity-50 p-4">
+                                    <div className="text-6xl mb-4">✨</div>
+                                    <p className="text-lg md:text-xl font-semibold">Click the buttons above to add items to your board!</p>
+                                    <p className="text-sm md:text-base mt-2">Drag items to move them around</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<VirtualCorkBoard />);
+    </script>
+</body>
+</html>
